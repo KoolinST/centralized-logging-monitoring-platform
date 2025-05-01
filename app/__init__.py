@@ -10,14 +10,15 @@ import os
 load_dotenv()
 
 
-def create_app():
+def create_app(env=None):
     # App initialization
     app = Flask(
         __name__,
         template_folder="../frontend/templates",
         static_folder="../frontend/static",
     )
-    env = os.getenv("FLASK_ENV", "development")
+    if not env:
+        env = os.getenv("FLASK_ENV", "development")
 
     if env == "production":
         from app.config.settings import ProductionConfig

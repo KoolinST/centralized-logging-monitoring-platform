@@ -1,6 +1,7 @@
+import os
+os.environ["FLASK_ENV"] = "testing"
 import logging
 import unittest
-import os
 from flask import url_for, get_flashed_messages, redirect
 from unittest.mock import patch
 from flask_login import login_user
@@ -24,14 +25,9 @@ class TestUser(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """This runs once before the entire test suite"""
-        cls.app = create_app()
-        cls.app.config["TESTING"] = True
-        cls.app.config["DEBUG"] = False
-        cls.app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+        cls.app = create_app(env="testing")
         cls.app.config["SECRET_KEY"] = os.getenv("SECRET_KEY")
         cls.app.config["SERVER_NAME"] = "localhost"
-        cls.app.config["APPLICATION_ROOT"] = "/"
-        cls.app.config["PREFERRED_URL_SCHEME"] = "http"
         cls.app.logger.setLevel(logging.CRITICAL)
 
     @classmethod
@@ -42,10 +38,8 @@ class TestUser(unittest.TestCase):
 
     def setUp(self):
         """This runs before each test"""
-        self.app = create_app()
         self.client = self.app.test_client()
         self.app.app_context().push()
-
         with self.app.app_context():
             db.create_all()
 
