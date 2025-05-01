@@ -1,5 +1,4 @@
 import os
-os.environ["FLASK_ENV"] = "testing"
 import logging
 import unittest
 from flask import url_for, get_flashed_messages, redirect
@@ -14,6 +13,7 @@ import time
 from common.status import HTTP_302_FOUND, HTTP_200_OK
 
 load_dotenv()
+os.environ["FLASK_ENV"] = "testing"
 DATABASE_URI = os.getenv(
     "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres"
 )
