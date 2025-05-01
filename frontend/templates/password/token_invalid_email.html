@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Invalid Token</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='token_invalid_email.css') }}">
+</head>
+<body>
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+        <div class="right-panel">
+            <div class="form-box">
+                <div class="error-icon">!</div>
+                <h2>Invalid or Expired Token</h2>
+                <p class="subtext">The link you used is no longer valid. It may have expired or already been used.</p>
+                <a class="back-link" href="{{ url_for('auth.email_confirmation') }}">Request a new email confirmation</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

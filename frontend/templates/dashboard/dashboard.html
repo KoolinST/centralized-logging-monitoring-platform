@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Centralized Monitoring System</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+</head>
+<body>
+    <div class="container">
+          {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+              <div class="flash-messages">
+                {% for category, message in messages %}
+                  <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          {% endwith %}
+        <header class="header">
+            <h1>Dashboard</h1>
+            <nav>
+                <a href="#" class="nav-item">Home</a>
+                <a href="#" class="nav-item">Logs</a>
+                <a href="#" class="nav-item">Metrics</a>
+                <a href="#" class="nav-item">Settings</a>
+                <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form">
+                    {{ form.hidden_tag() }}
+                    <button type="submit" class="logout-button">Logout</button>
+                </form>
+            </nav>
+        </header>
+
+        <div class="main-content">
+            <div class="cards">
+                <div class="card">
+                    <h3>Total Logs</h3>
+                    <p>1,245</p>
+                </div>
+                <div class="card">
+                    <h3>Active Sessions</h3>
+                    <p>56</p>
+                </div>
+                <div class="card">
+                    <h3>Error Rate</h3>
+                    <p>3.2%</p>
+                </div>
+                <div class="card">
+                    <h3>Alerts</h3>
+                    <p>12</p>
+                </div>
+            </div>
+
+            <div class="charts">
+                <div class="chart">
+                    <h4>Log Trends</h4>
+                    <div class="placeholder">Chart Placeholder</div>
+                </div>
+                <div class="chart">
+                    <h4>Error Trends</h4>
+                    <div class="placeholder">Chart Placeholder</div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>&copy; 2025 Centralized Monitoring System</p>
+        </footer>
+    </div>
+</body>
+</html>

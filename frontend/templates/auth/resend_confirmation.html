@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Resend Confirmation</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='resend_confirmation.css') }}">
+</head>
+<body>
+  <div class="container">
+
+    <div class="right-panel">
+      <div class="form-box">
+        <h2>Resend Confirmation</h2>
+        <p class="subtext">Enter your email address below and we will resend the confirmation email.</p>
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="{{ url_for('auth.resend_confirmation') }}">
+          {{ form.hidden_tag() }}
+
+          <div class="input-group">
+            {{ form.email.label }}
+            {{ form.email(class="input-field", placeholder="Enter your email") }}
+          </div>
+
+          <button type="submit" class="submit-button">Resend Email</button>
+        </form>
+
+        <p class="login-link">Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a></p>
+      </div>
+    </div>
+
+    <div class="left-panel">
+      <img src="{{ url_for('static', filename='images/pexels-rickyrecap-1964471.jpg') }}" alt="Resend Confirmation Illustration" />
+    </div>
+
+  </div>
+</body>
+</html>

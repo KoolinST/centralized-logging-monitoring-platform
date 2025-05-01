@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Register</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='registration.css') }}">
+</head>
+<body>
+  <div class="container">
+
+    <div class="right-panel">
+      <div class="form-box">
+        <h2>Create a new account</h2>
+        <p class="subtext">Get started with your new account</p>
+
+        <form method="POST" action="{{ url_for('auth.register') }}">
+          {{ form.hidden_tag() }}
+
+          <label for="name">Name</label>
+          <input type="text" name="name" id="name" value="{{ form.name.data or '' }}" required>
+          {% for error in form.name.errors %}
+            <div class="flash danger">
+              <i class="fas fa-exclamation-circle"></i>
+              <span>{{ error }}</span>
+              <button type="button" class="close" onclick="this.parentElement.style.display='none'">×</button>
+            </div>
+          {% endfor %}
+
+          <label for="username">Username</label>
+          <input type="text" name="username" id="username" value="{{ form.username.data or '' }}" required>
+          {% for error in form.username.errors %}
+            <div class="flash danger">
+              <i class="fas fa-exclamation-circle"></i>
+              <span>{{ error }}</span>
+              <button type="button" class="close" onclick="this.parentElement.style.display='none'">×</button>
+            </div>
+          {% endfor %}
+
+          <label for="email">Email</label>
+          <input type="email" name="email" id="email" value="{{ form.email.data or '' }}" required>
+          {% for error in form.email.errors %}
+            <div class="flash danger">
+              <i class="fas fa-exclamation-circle"></i>
+              <span>{{ error }}</span>
+              <button type="button" class="close" onclick="this.parentElement.style.display='none'">×</button>
+            </div>
+          {% endfor %}
+
+          <label for="password">Password</label>
+          <input type="password" name="password" id="password" required>
+          {% for error in form.password.errors %}
+            <div class="flash danger">
+              <i class="fas fa-exclamation-circle"></i>
+              <span>{{ error }}</span>
+              <button type="button" class="close" onclick="this.parentElement.style.display='none'">×</button>
+            </div>
+          {% endfor %}
+
+          <label for="confirm_password">Confirm Password</label>
+          <input type="password" name="confirm_password" id="confirm_password" required>
+          {% for error in form.confirm_password.errors %}
+            <div class="flash danger">
+              <i class="fas fa-exclamation-circle"></i>
+              <span>{{ error }}</span>
+              <button type="button" class="close" onclick="this.parentElement.style.display='none'">×</button>
+            </div>
+          {% endfor %}
+
+          <button type="submit">Sign Up</button>
+        </form>
+
+        <p class="signup-link">Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a></p>
+      </div>
+    </div>
+
+    <div class="left-panel">
+      <img src="{{ url_for('static', filename='images/pexels-rickyrecap-1964471.jpg') }}" alt="Registration Illustration" />
+    </div>
+
+  </div>
+</body>
+</html>
