@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, Response
 from dotenv import load_dotenv
 from datetime import timedelta
 from app.extensions import db, login_manager, bcrypt, mail, oauth
@@ -6,6 +6,10 @@ from app.routes.auth import auth
 from app.routes.dashboard import dashboard
 from app.routes.password import password
 import os
+import logging
+from logging.handlers import RotatingFileHandler
+from prometheus_flask_exporter import PrometheusMetrics
+from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 load_dotenv()
 
@@ -17,6 +21,18 @@ def create_app(env=None):
         template_folder="../frontend/templates",
         static_folder="../frontend/static",
     )
+
+    log_level = logging.INFO if env in ("production", "testing") else logging.DEBUG
+
+    formatter = logging.Formatter(
+        "%(asctime)s %(name)s.%(funcName)s [%(levelname)s] - %(message)s"
+    )
+
+    file_handler = RotatingFileHandler("app.log", maxBytes=10_000_000, backupCount=3)
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+    app.logger.addHandler(file_handler)
+
     if not env:
         env = os.getenv("FLASK_ENV", "development")
 
@@ -32,12 +48,16 @@ def create_app(env=None):
         from app.config.settings import DevelopmentConfig
 
         app.config.from_object(DevelopmentConfig)
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(log_level)
+        console_handler.setFormatter(formatter)
+        app.logger.addHandler(console_handler)
 
     db.init_app(app)
     login_manager.init_app(app)
     bcrypt.init_app(app)
     mail.init_app(app)
-
+    metrics = PrometheusMetrics(app)
     # Configure login manager
     login_manager.login_view = "auth.login"
     login_manager.remember_cookie_duration = timedelta(hours=1)
@@ -46,6 +66,10 @@ def create_app(env=None):
     app.register_blueprint(auth)
     app.register_blueprint(dashboard)
     app.register_blueprint(password)
+
+    @app.route("/metrics")
+    def metrics_endpoint():
+        return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
     oauth.init_app(app)
     oauth.register(

@@ -20,6 +20,18 @@ This is a microservice-based platform designed for centralized logging, monitori
 - **Docker & Kubernetes**: For containerized deployment.
 - **JWT Authentication**: For secure API access.
 
+| Service       | Port  | Description                           |
+|---------------|-------|---------------------------------------|
+| Flask App     | 5050  | Main application                      |
+| PostgreSQL    | 5432  | Database for the app                  |
+| PGAdmin       | 8080  | GUI for PostgreSQL                    |
+| Prometheus    | 9090  | Time-series metrics                   |
+| Node Exporter | 9100  | Host-level metrics                    |
+| Grafana       | 3000  | Dashboards for metrics visualization  |
+| Elasticsearch | 9200  | Log storage/search                    |
+| Kibana        | 5601  | Visualization for logs                |
+| Fluentd       | —     | Log collector, sends to Elasticsearch |
+
 ### **How to Use:**
 1. Clone the repository: `git clone <repo_url>`
 2. Build and run using Docker: `docker-compose up`

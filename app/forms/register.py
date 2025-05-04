@@ -26,6 +26,7 @@ class RegisterForm(FlaskForm):
 
     def validate_email(self, email):
         from app.models.user import User
+
         user = User.query.filter(User.email.ilike(email.data)).first()
         if user:
             raise ValidationError(
@@ -35,7 +36,7 @@ class RegisterForm(FlaskForm):
     def validate_username(self, username):
         from app.models.user import User
 
-        user = User.query.filter_by(username=username.data).first()
+        user = User.query.filter(User.username.ilike(username.data)).first()
         if user:
             raise ValidationError(
                 "This username is already taken. Please choose a different one."

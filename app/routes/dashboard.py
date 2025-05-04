@@ -15,9 +15,7 @@ dashboard = Blueprint(
 @dashboard.route("/dashboard")
 @login_required
 def dashboard_view():
-    if (
-        not current_user.last_login or time.time() - current_user.last_login > 3600
-    ):
+    if not current_user.last_login or time.time() - current_user.last_login > 3600:
         logout_user()
         flash("Your session has expired. Please log in again.", "info")
         return redirect(url_for("auth.login"))

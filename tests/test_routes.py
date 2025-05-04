@@ -2,7 +2,7 @@ import os
 import logging
 import unittest
 from flask import url_for, get_flashed_messages, redirect
-from unittest.mock import patch
+from unittest.mock import patch, MagicMock
 from flask_login import login_user
 from app.extensions import db, bcrypt
 from app import create_app
@@ -69,6 +69,8 @@ class TestUser(unittest.TestCase):
             response = self.client.get("/test")
             self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    # ---------------- TEST REGISTER ----------------
+
     def test_register_authenticated_user(self):
         """Test if an authenticated user is redirected to the dashboard page"""
         user = self.create_user()
@@ -96,8 +98,17 @@ class TestUser(unittest.TestCase):
 
             self.assertIn(b"This field is required.", response.data)
 
-    def test_register_successful_user(self):
+    @patch("app.routes.auth.send_confirmation_email")
+    @patch("app.routes.auth.registration_success_counter.inc")
+    @patch("app.routes.auth.endpoint_latency.labels")
+    def test_register_successful_user(
+        self, mock_latency_labels, mock_registration_counter, mock_send_email
+    ):
         """Test successful registration"""
+        mock_label = MagicMock()
+        mock_latency_labels.return_value = mock_label
+        mock_timer = MagicMock()
+        mock_label.time.return_value.__enter__.return_value = mock_timer
         data = {
             "name": "Test User",
             "username": "testuser",
@@ -116,53 +127,47 @@ class TestUser(unittest.TestCase):
                     response.location,
                     url_for("auth.email_confirmation", _external=False),
                 )
+
             with self.app.app_context():
                 with self.client.session_transaction() as session:
                     flash_message = session.get("_flashes")[0][1]
                     self.assertEqual(
                         flash_message, "Registration successful. Please log in."
                     )
+                mock_send_email.assert_called_once()
+                mock_registration_counter.assert_called_once()
+                mock_label.time.assert_called_once()
 
-    def test_confirm_email(self):
-        """Test confirmation email by user using unique link"""
-        with self.app.app_context():
-            new_user = self.create_user()
-            user = User.query.filter_by(email="testuser@example.com").first()
-            self.assertFalse(user.confirmed)
-            self.token = user.get_email_confirmation_token()
+    @patch("app.routes.auth.registration_failure_counter.inc")
+    @patch("app.routes.auth.endpoint_latency.labels")
+    def test_register_failure(self, mock_latency_labels, mock_failure_counter):
+        """Simulate a failure during user registration"""
+        mock_label = MagicMock()
+        mock_latency_labels.return_value = mock_label
+        mock_timer = MagicMock()
+        mock_label.time.return_value.__enter__.return_value = mock_timer
+        data = {
+            "name": "Test User",
+            "username": "testuser",
+            "email": "testuser@example.com",
+            "password": "password",
+            "confirm_password": "password",
+        }
 
-            with self.app.test_request_context("/"):
-                response = self.client.get(
-                    url_for("auth.confirm_email", token=self.token)
-                )
-
-                user = User.query.filter_by(email="testuser@example.com").first()
-                self.assertTrue(user.confirmed)
+        with patch(
+            "app.routes.auth.db.session.commit", side_effect=Exception("Database error")
+        ):
+            with self.app.app_context():
+                response = self.client.post("/register", data=data)
                 self.assertEqual(response.status_code, HTTP_302_FOUND)
                 self.assertEqual(
-                    response.location, url_for("auth.login", _external=False)
+                    response.location, url_for("auth.register", _external=False)
                 )
 
-    def test_confirm_email_error(self):
-        """Test confirmation email by user using unique link with invalid token"""
-        with self.app.app_context():
-            new_user = self.create_user()
-            user = User.query.filter_by(email="testuser@example.com").first()
-            self.assertFalse(user.confirmed)
-            self.token = "invalidtoken"
+                mock_failure_counter.assert_called_once()
+                mock_label.time.assert_called_once()
 
-            with self.app.test_request_context("/"):
-                response = self.client.get(
-                    url_for("auth.confirm_email", token=self.token)
-                )
-
-                user = User.query.filter_by(email="testuser@example.com").first()
-                self.assertFalse(user.confirmed)
-                self.assertEqual(response.status_code, HTTP_302_FOUND)
-                self.assertEqual(
-                    response.location,
-                    url_for("password.token_invalid", _external=False),
-                )
+    # ---------------- TEST LOGIN ----------------
 
     def test_login_authenticated(self):
         """Test if an authenticated user is redirected to the dashboard page"""
@@ -202,6 +207,7 @@ class TestUser(unittest.TestCase):
                     "password": "wrpassword",
                 },
             )
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
             self.assertIn(
                 b"Login Unsuccessful. Please check your email and password.",
                 response.data,
@@ -215,8 +221,95 @@ class TestUser(unittest.TestCase):
             response = client.post(
                 "/login", data={"email": "test@example.com", "password": "password123"}
             )
-
+            self.assertEqual(response.status_code, status.HTTP_200_OK)
             self.assertIn("An error occurred: Database error", response.data.decode())
+
+    # ---------------- TEST EMAIL CONFIRMATION ----------------
+
+    @patch("app.routes.auth.email_confirmation_success_counter.inc")
+    @patch("app.routes.auth.endpoint_latency.labels")
+    @patch("app.routes.auth.send_confirmation_email")
+    def test_confirm_email(
+        self, mock_send_email, mock_latency_labels, mock_success_counter
+    ):
+        """Test confirmation email by user using unique link"""
+        with self.app.app_context():
+            new_user = self.create_user()
+            self.token = new_user.get_email_confirmation_token()
+            mock_label = MagicMock()
+            mock_latency_labels.return_value = mock_label
+            mock_timer = MagicMock()
+            mock_label.time.return_value.__enter__.return_value = mock_timer
+            with self.app.test_request_context("/"):
+                response = self.client.get(
+                    url_for("auth.confirm_email", token=self.token)
+                )
+
+                user = User.query.filter_by(email="testuser@example.com").first()
+                self.assertTrue(user.confirmed)
+                self.assertEqual(response.status_code, HTTP_302_FOUND)
+                self.assertEqual(
+                    response.location, url_for("auth.login", _external=False)
+                )
+                mock_success_counter.assert_called_once()
+                mock_label.time.assert_called_once()
+
+    def test_confirm_email_error(self):
+        """Test confirmation email by user using unique link with invalid token"""
+        with self.app.app_context():
+            new_user = self.create_user()
+            user = User.query.filter_by(email="testuser@example.com").first()
+            self.assertFalse(user.confirmed)
+            self.token = "invalidtoken"
+
+            with self.app.test_request_context("/"):
+                response = self.client.get(
+                    url_for("auth.confirm_email", token=self.token)
+                )
+
+                user = User.query.filter_by(email="testuser@example.com").first()
+                self.assertFalse(user.confirmed)
+                self.assertEqual(response.status_code, HTTP_302_FOUND)
+                self.assertEqual(
+                    response.location,
+                    url_for("password.token_invalid_email", _external=False),
+                )
+
+    @patch("app.routes.auth.email_confirmation_failure_counter.inc")
+    @patch("app.routes.auth.endpoint_latency.labels")
+    @patch("app.routes.auth.send_confirmation_email")
+    def test_confirm_email_exception(
+        self, mock_send_email, mock_latency_labels, mock_failure_counter
+    ):
+        """Simulate internal failure during email confirmation"""
+        with self.app.app_context():
+            new_user = self.create_user()
+            self.token = "valid_token_that_will_fail"
+            mock_label = MagicMock()
+            mock_latency_labels.return_value = mock_label
+            mock_timer = MagicMock()
+            mock_label.time.return_value.__enter__.return_value = mock_timer
+
+            with patch.object(
+                User,
+                "verify_and_get_user_from_email_token",
+                side_effect=Exception("Internal failure"),
+            ):
+                with self.app.test_request_context("/"):
+                    response = self.client.get(
+                        url_for("auth.confirm_email", token=self.token)
+                    )
+
+                    user = User.query.filter_by(email="testuser@example.com").first()
+                    self.assertFalse(user.confirmed)
+                    self.assertEqual(response.status_code, HTTP_302_FOUND)
+                    self.assertEqual(
+                        response.location,
+                        url_for("auth.login", _external=False),
+                    )
+
+                    mock_failure_counter.assert_called_once()
+                    mock_label.time.assert_called_once()
 
     def test_email_confirmation(self):
         """Test route for user_confirmation communicate"""
@@ -224,69 +317,78 @@ class TestUser(unittest.TestCase):
             response = self.client.get("/email_confirmation")
             self.assertEqual(response.status_code, status.HTTP_200_OK)
 
-    @patch("app.db.session.scalar")
-    @patch("app.utils.email.mail.send")
-    def test_resend_confirmation_confirmed(self, mock_send_email, mock_scalar):
+    @patch("app.routes.auth.send_confirmation_email")
+    @patch("app.routes.auth.email_confirmation_success_counter.inc")
+    @patch("app.routes.auth.endpoint_latency.labels")
+    def test_resend_confirmation_confirmed(
+        self, mock_latency_labels, mock_success_counter, mock_send_email
+    ):
         """Test resend confirmation email to already confirmed user"""
-        user = User(
-            name="Test User",
-            username="testuser",
-            email="testuser@example.com",
-            password=bcrypt.generate_password_hash("password").decode("utf-8"),
-            confirmed=True,
-        )
-        mock_scalar.return_value = user
-        with self.app.test_client() as client:
+        mock_label = MagicMock()
+        mock_latency_labels.return_value = mock_label
+        mock_timer = MagicMock()
+        mock_label.time.return_value.__enter__.return_value = mock_timer
+        user = self.create_user()
+        user.confirm_email()
+        with self.app.app_context():
             response = self.client.post(
                 "/resend_confirmation",
-                data={"email": "test@example.com"},
+                data={"email": "testuser@example.com"},
                 follow_redirects=True,
             )
-
             mock_send_email.assert_not_called()
+            self.assertEqual(response.status_code, HTTP_200_OK)
             self.assertIn(
                 "Account already confirmed. Please log in.", response.data.decode()
             )
 
-    @patch("app.db.session.scalar")
-    @patch("app.utils.email.mail.send")
-    def test_resend_confirmation_unconfirmed(self, mock_send_email, mock_scalar):
+    @patch("app.routes.auth.email_confirmation_sends_success_counter.inc")
+    @patch("app.routes.auth.endpoint_latency.labels")
+    @patch("app.routes.auth.db.session.scalar")
+    @patch("app.routes.auth.send_confirmation_email")
+    def test_resend_confirmation_unconfirmed(
+        self, mock_send_email, mock_scalar, mock_latency_labels, mock_failure_counter
+    ):
         """Test resend confirmation email to already confirmed user"""
-        user = User(
-            name="Test User",
-            username="testuser",
-            email="testuser@example.com",
-            password=bcrypt.generate_password_hash("password").decode("utf-8"),
-            confirmed=False,
-            email_confirmation_expiry=int(time.time()) - 4000,
-        )
-        mock_scalar.return_value = user
-        with self.app.test_client() as client:
+        with self.app.app_context():
+            user = self.create_user()
+            user.email_confirmation_expiry = time.time() - 4000
+            user.confirmed = False
+            mock_label = MagicMock()
+            mock_latency_labels.return_value = mock_label
+            mock_timer = MagicMock()
+            mock_label.time.return_value.__enter__.return_value = mock_timer
+            mock_scalar.return_value = user
             response = self.client.post(
                 "/resend_confirmation",
-                data={"email": "test@example.com"},
-                follow_redirects=True,
+                data={"email": "testuser@example.com"},
+                follow_redirects=False,
             )
-
             mock_send_email.assert_called_once()
-            sent_message = mock_send_email.call_args[0][0]
-            self.assertEqual(sent_message.recipients, ["testuser@example.com"])
-            self.assertIn("Confirm Your Email", sent_message.subject)
+            self.assertEqual(response.status_code, status.HTTP_302_FOUND)
+            self.assertEqual(
+                response.location,
+                url_for("auth.email_confirmation", _external=False),
+            )
+            mock_failure_counter.assert_called_once()
+            mock_label.time.assert_called_once()
 
-    @patch("app.db.session.scalar")
-    @patch("app.routes.auth.send_confirmation_email")
-    def test_resend_confirmation_unconfirmed_error(self, mock_send_email, mock_scalar):
+    @patch("app.routes.auth.email_confirmation_sends_failure_counter.inc")
+    @patch("app.routes.auth.endpoint_latency.labels")
+    @patch("app.routes.auth.db.session.scalar")
+    def test_resend_confirmation_unconfirmed_error(
+        self, mock_scalar, mock_latency_labels, mock_failure_counter
+    ):
         """Test resend confirmation email to unconfirmed user with error"""
-        user = User(
-            name="Test User",
-            username="testuser",
-            email="testuser@example.com",
-            password=bcrypt.generate_password_hash("password").decode("utf-8"),
-            confirmed=False,
-            email_confirmation_expiry=int(time.time()),
-        )
-        mock_scalar.return_value = user
-        with self.app.test_request_context("/"):
+        with self.app.app_context():
+            user = self.create_user()
+            user.email_confirmation_expiry = time.time()
+            user.confirmed = False
+            mock_label = MagicMock()
+            mock_latency_labels.return_value = mock_label
+            mock_timer = MagicMock()
+            mock_label.time.return_value.__enter__.return_value = mock_timer
+            mock_scalar.return_value = user
             response = self.client.post(
                 "/resend_confirmation",
                 data={"email": "testuser@example.com"},
@@ -297,6 +399,8 @@ class TestUser(unittest.TestCase):
                 response.location,
                 url_for("password.token_invalid_email", _external=False),
             )
+            mock_failure_counter.assert_called_once()
+            mock_label.time.assert_called_once()
 
     @patch("app.db.session.scalar")
     @patch("app.utils.email.mail.send")
@@ -312,26 +416,81 @@ class TestUser(unittest.TestCase):
             mock_send_email.assert_not_called()
             self.assertIn("No account found with that email.", response.data.decode())
 
-    def test_logout(self):
+    @patch("app.routes.auth.email_confirmation_sends_failure_counter.inc")
+    @patch("app.routes.auth.endpoint_latency.labels")
+    def test_resend_email_exception(self, mock_latency_labels, mock_failure_counter):
+        """Simulate internal failure during resend email confirmation"""
+        mock_label = MagicMock()
+        mock_latency_labels.return_value = mock_label
+        mock_timer = MagicMock()
+        mock_label.time.return_value.__enter__.return_value = mock_timer
+        with self.app.app_context():
+            user = self.create_user()
+            data = {"email": "testuser@example.com"}
+            with patch(
+                "app.routes.auth.send_confirmation_email",
+                side_effect=Exception("DataBase failure"),
+            ):
+                response = self.client.post(
+                    url_for("auth.resend_confirmation"),
+                    data=data,
+                    follow_redirects=True,
+                )
+
+                self.assertEqual(response.status_code, HTTP_200_OK)
+                self.assertIn(
+                    "An error occurred while processing", response.data.decode()
+                )
+
+                mock_failure_counter.assert_called_once()
+                mock_label.time.assert_called_once()
+
+    # ---------------- TEST LOGOUT ----------------
+
+    @patch("app.routes.auth.endpoint_latency.labels")
+    def test_logout(self, mock_latency_labels):
         """Test that the user is logged out and redirected to login page"""
-        user = self.create_user()
-        with self.app.test_request_context("/"):
-            login_user(user)
+        mock_label = MagicMock()
+        mock_latency_labels.return_value = mock_label
+        mock_timer = MagicMock()
+        mock_label.time.return_value.__enter__.return_value = mock_timer
+        with self.app.app_context():
+            user = self.create_user()
+            with self.app.test_request_context("/"):
+                login_user(user)
             response = self.client.post("/logout", follow_redirects=True)
 
             self.assertIn("You have been logged out.", response.data.decode())
+            mock_latency_labels.assert_any_call(endpoint="/logout")
+            self.assertTrue(mock_label.time.called)
 
-    def test_check_box(self):
+    # ---------------- TEST STATIC PAGES ----------------
+
+    @patch("app.routes.auth.endpoint_latency.labels")
+    def test_check_box(self, mock_latency_labels):
         """Test if check-box route is working correctly"""
+        mock_label = MagicMock()
+        mock_latency_labels.return_value = mock_label
+        mock_timer = MagicMock()
+        mock_label.time.return_value.__enter__.return_value = mock_timer
         with self.app.app_context():
             response = self.client.get("/check-box")
             self.assertEqual(response.status_code, HTTP_200_OK)
+            mock_label.time.assert_called_once()
 
-    def test_register_land(self):
+    @patch("app.routes.auth.endpoint_latency.labels")
+    def test_register_land(self, mock_latency_labels):
         """Test if register_land route is working correctly"""
+        mock_label = MagicMock()
+        mock_latency_labels.return_value = mock_label
+        mock_timer = MagicMock()
+        mock_label.time.return_value.__enter__.return_value = mock_timer
         with self.app.app_context():
             response = self.client.get("/registerL")
             self.assertEqual(response.status_code, HTTP_200_OK)
+            mock_label.time.assert_called_once()
+
+    # ---------------- TEST GOOGLE OAUTH ----------------
 
     @patch("app.utils.generating.generate_nonce")
     @patch("app.oauth.google.authorize_redirect")
@@ -352,6 +511,40 @@ class TestUser(unittest.TestCase):
         mock_authorize_redirect.assert_called_once_with(
             redirect_uri, nonce=mock_generate_nonce.return_value
         )
+
+    @patch("app.utils.generating.generate_nonce")
+    @patch("app.oauth.google.authorize_redirect")
+    @patch(
+        "app.routes.auth.registration_failure_counter.inc"
+    )  # Patch the failure counter
+    def test_register_google_with_error(
+        self, mock_failure_counter, mock_authorize_redirect, mock_generate_nonce
+    ):
+        """Test that an exception during Google registration is handled correctly."""
+
+        mock_generate_nonce.return_value = "WgRs1dDi0442qSZe"
+        redirect_uri = url_for("auth.google_register_authorized", _external=True)
+        mock_authorize_redirect.side_effect = Exception(
+            "Error during Google registration"
+        )
+
+        with self.app.test_request_context("/"):
+            with self.client.session_transaction() as sess:
+                sess.clear()
+                sess["nonce"] = mock_generate_nonce.return_value
+
+            response = self.client.get("/register/google", follow_redirects=False)
+            self.assertEqual(response.status_code, HTTP_302_FOUND)
+            self.assertIn(
+                url_for("auth.register_land", _external=False),
+                response.headers["Location"],
+            )
+            mock_failure_counter.assert_called_once()
+            follow_response = self.client.get(response.location)
+            self.assertIn(
+                "Error during Google registration",
+                follow_response.data.decode("utf-8"),
+            )
 
     @patch("app.oauth.google.authorize_access_token")
     @patch("app.oauth.google.parse_id_token")
@@ -486,6 +679,8 @@ class TestUser(unittest.TestCase):
                 flashed_messages,
             )
 
+    # ---------------- TEST SETUP PASSWORD ----------------
+
     @patch("app.models.user")
     @patch("app.bcrypt.generate_password_hash")
     def test_setup_password_valid(self, mock_bcrypt, mock_user_query):
@@ -523,7 +718,7 @@ class TestUser(unittest.TestCase):
         response = self.client.get("/setup_password", follow_redirects=False)
 
         self.assertEqual(response.status_code, HTTP_302_FOUND)
-        self.assertIn("login", response.location)
+        self.assertIn("registerL", response.location)
         follow_response = self.client.get(response.location)
         self.assertIn(
             "Session expired or invalid. Please authenticate again.",

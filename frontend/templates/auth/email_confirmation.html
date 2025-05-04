@@ -13,7 +13,15 @@
       <div class="form-box">
         <h2>Email Confirmation</h2>
         <p class="subtext">Please check your inbox for the confirmation email and follow the instructions to activate your account.</p>
-
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
         <div class="message-box">
           <p class="info-message">We've sent a confirmation email to <strong>{{ email }}</strong>. If you don't see it, check your spam folder or <a href="{{ url_for('auth.resend_confirmation', token = token) }}">request a new one</a>.</p>
         </div>
