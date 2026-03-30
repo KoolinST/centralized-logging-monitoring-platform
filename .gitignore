@@ -16,4 +16,15 @@ env/
 *.p12
 *.der
 __pycache__/
-*.py[cod]
+*.py[cod].coverage
+coverage.xml
+test-result/
+test-results/
+*.pem
+myenv/
+.coverage
+tests/.coverage
+monitoring/loki-data/
+app/.pytest_cache/
+tests/.pytest_cache/
+.pytest_cache/

@@ -1,3 +1,4 @@
+import time
 from flask import (
     render_template,
     redirect,
@@ -8,17 +9,18 @@ from flask import (
     current_app,
     request,
 )
-
 from flask_login import login_user, current_user, logout_user, login_required
-from app.models.user import User
+from sqlalchemy import select
+from app.extensions import db, bcrypt, oauth
+from app.models.user import User, AuditLog
 from app.forms.register import RegisterForm
 from app.forms.login import LoginForm
-from app.utils.email import send_confirmation_email
-from sqlalchemy import select
-from app.forms.resend_confirmation import ResendConfirmationForm
 from app.forms.oauth import SetUpPassword
-import time
 from app.utils import generating
+from app.utils.email import (
+    send_confirmation_email,
+    send_admin_new_user_notification,
+)
 from app.metrics import (
     registration_success_counter,
     registration_failure_counter,
@@ -31,9 +33,6 @@ from app.metrics import (
     login_failure_counter,
 )
 
-
-from app.extensions import db, bcrypt, oauth
-
 auth = Blueprint(
     "auth",
     __name__,
@@ -41,23 +40,11 @@ auth = Blueprint(
     static_folder="../../frontend/static",
 )
 
-# ---------------- TESTING ----------------
-
-
-@auth.route("/test")
-def test_template():
-    current_app.logger.debug("Hello From test Roooute")
-    return render_template("test.html")
-
-
-# ---------------- REGISTER ----------------
-
 
 @auth.route("/register", methods=["GET", "POST"])
 def register():
     if current_user.is_authenticated:
         return redirect(url_for("dashboard.dashboard_view"))
-
     form = RegisterForm()
     with endpoint_latency.labels(endpoint="/register").time():
         if form.validate_on_submit():
@@ -70,59 +57,108 @@ def register():
                     username=form.username.data.lower(),
                     email=form.email.data.lower(),
                     password=hashed_pw,
+                    role="developer",
+                    status="pending",
                 )
                 db.session.add(new_user)
+                db.session.flush()
+                AuditLog.log(
+                    action="register",
+                    user_id=new_user.id,
+                    detail=f"New registration: {new_user.email}",
+                    ip_address=request.remote_addr,
+                )
                 db.session.commit()
+                session["pending_email"] = new_user.email
                 send_confirmation_email(new_user)
-                flash("Registration successful. Please log in.", "success")
+                send_admin_new_user_notification(new_user)
                 registration_success_counter.inc()
+                flash(
+                    "Registration successful! Please check your email "
+                    "to confirm your account.",
+                    "success",
+                )
                 return redirect(url_for("auth.email_confirmation"))
             except Exception as e:
+                db.session.rollback()
                 current_app.logger.error(f"Registration failed: {str(e)}")
                 flash("Registration failed. Please try again.", "danger")
                 registration_failure_counter.inc()
                 return redirect(url_for("auth.register"))
-
     return render_template("registration.html", form=form)
-
-
-# ---------------- LOGIN ----------------
 
 
 @auth.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("dashboard.dashboard_view"))
-
     form = LoginForm()
     with endpoint_latency.labels(endpoint="/login").time():
         if form.validate_on_submit():
             try:
                 stmt = select(User).where(User.email == form.email.data.lower())
                 user = db.session.scalar(stmt)
-
                 if user and user.check_password(form.password.data):
+                    if not user.confirmed:
+                        flash(
+                            "Please confirm your email before logging in.",
+                            "warning",
+                        )
+                        session["pending_mail"] = user.email
+                        return redirect(url_for("auth.email_confirmation"))
                     login_user(user)
                     user.last_login = int(time.time())
+                    AuditLog.log(
+                        action="login",
+                        user_id=user.id,
+                        detail=f"User logged in: {user.email}",
+                        ip_address=request.remote_addr,
+                    )
                     db.session.commit()
-                    flash("You have been logged in.", "success")
                     login_counter.inc()
+                    if user.is_pending:
+                        return redirect(url_for("auth.pending"))
+                    if user.is_rejected:
+                        logout_user()
+                        flash(
+                            "Your account has been rejected. Contact an administrator.",
+                            "danger",
+                        )
+                        return redirect(url_for("auth.login"))
                     return redirect(url_for("dashboard.dashboard_view"))
-
                 else:
+                    AuditLog.log(
+                        action="login_failed",
+                        detail=f"Failed login attempt for: {form.email.data.lower()}",
+                        ip_address=request.remote_addr,
+                    )
+                    db.session.commit()
                     flash(
-                        "Login Unsuccessful. Please check your email and password.",
+                        "Login unsuccessful. Please check your email and password.",
                         "danger",
                     )
                     login_failure_counter.inc()
             except Exception as e:
+                db.session.rollback()
                 current_app.logger.error(f"Login error: {str(e)}")
-                flash(f"An error occurred: {str(e)}", "danger")
+                flash("An unexpected error occurred. Please try again.", "danger")
                 login_failure_counter.inc()
     return render_template("login.html", form=form)
 
 
-# ---------------- EMAIL CONFIRMATION ----------------
+@auth.route("/pending")
+@login_required
+def pending():
+    if current_user.is_approved:
+        return redirect(url_for("dashboard.dashboard_view"))
+    if current_user.is_rejected:
+        logout_user()
+        flash("Your account has been rejected. Contact an administrator.", "danger")
+        return redirect(url_for("auth.login"))
+    from app.forms.logout import LogoutForm
+
+    form = LogoutForm()
+    return render_template("pending.html", user=current_user, form=form)
 
 
 @auth.route("/confirm_email/<token>")
@@ -134,13 +170,23 @@ def confirm_email(token):
                 flash("The confirmation link is invalid or has expired.", "danger")
                 email_confirmation_failure_counter.inc()
                 return redirect(url_for("password.token_invalid_email"))
-
             user.confirm_email()
-            flash("Your email has been confirmed. You can now log in.", "success")
+            AuditLog.log(
+                action="email_confirmed",
+                user_id=user.id,
+                detail=f"Email confirmed: {user.email}",
+                ip_address=request.remote_addr,
+            )
+            db.session.commit()
+            flash(
+                "Your email has been confirmed. "
+                "Your account is now pending admin approval.",
+                "success",
+            )
             email_confirmation_success_counter.inc()
             return redirect(url_for("auth.login"))
-
         except Exception as e:
+            db.session.rollback()
             current_app.logger.error(f"Email confirmation failed: {str(e)}")
             flash("An unexpected error occurred. Please try again later.", "danger")
             email_confirmation_failure_counter.inc()
@@ -150,82 +196,64 @@ def confirm_email(token):
 @auth.route("/email_confirmation")
 def email_confirmation():
     with endpoint_latency.labels(endpoint="/email_confirmation").time():
-        current_app.logger.info(
-            f"/email_confirmation accessed by {request.remote_addr}"
-        )
-        return render_template("email_confirmation.html")
+        email = session.get("pending_email", "")
+        return render_template("email_confirmation.html", email=email)
 
 
-@auth.route("/resend_confirmation", methods=["GET", "POST"])
+@auth.route("/resend_confirmation", methods=["POST"])
 def resend_confirmation():
-    form = ResendConfirmationForm()
     with endpoint_latency.labels(endpoint="/resend_confirmation").time():
-        if form.validate_on_submit():
-            try:
-                stmt = select(User).where(User.email == form.email.data.lower())
-                user = db.session.scalar(stmt)
-                if user:
-                    if user.confirmed:
-                        flash("Account already confirmed. Please log in.", "info")
-                        current_app.logger.info(
-                            f"Email already confirmed: {form.email.data.lower()}"
-                        )
-                        return redirect(url_for("auth.login"))
-
-                    current_time = int(time.time())
-                    expiry = user.email_confirmation_expiry or 0
-                    if (current_time - expiry) > 3600:
-                        send_confirmation_email(user)
-                        email_confirmation_sends_success_counter.inc()
-                        current_app.logger.info(
-                            f"Resent confirmation to: {form.email.data.lower()}"
-                        )
-                        flash("Confirmation email resent.", "success")
-                        return redirect(url_for("auth.email_confirmation"))
-                    else:
-                        email_confirmation_sends_failure_counter.inc()
-                        flash(
-                            "Confirmation email already sent recently. Please wait.",
-                            "warning",
-                        )
-                        current_app.logger.warning(
-                            f"Resend blocked (too soon): {form.email.data.lower()}"
-                        )
-                        return redirect(url_for("password.token_invalid_email"))
-                else:
-                    flash("No account found with that email.", "danger")
-                    current_app.logger.warning(
-                        f"Resend requested for "
-                        f"nonexistent email: {form.email.data.lower()}"
-                    )
-            except Exception as e:
+        try:
+            email = session.get("pending_email", "") or request.form.get("email", "")
+            if not email:
+                flash("Session expired. Please try logging in again.", "warning")
+                return redirect(url_for("auth.login"))
+            stmt = select(User).where(User.email == email.lower())
+            user = db.session.scalar(stmt)
+            if not user:
+                flash("No account found with that email.", "danger")
+                return redirect(url_for("auth.email_confirmation"))
+            if user.confirmed:
+                flash("Account already confirmed. Please log in.", "info")
+                return redirect(url_for("auth.login"))
+            current_time = int(time.time())
+            expiry = user.email_confirmation_expiry or 0
+            if (current_time - expiry) > 3600:
+                send_confirmation_email(user)
+                email_confirmation_sends_success_counter.inc()
+                flash("Confirmation email resent.", "success")
+            else:
                 email_confirmation_sends_failure_counter.inc()
-                current_app.logger.error(
-                    f"Resend error for {form.email.data.lower()}: {str(e)}"
-                )
                 flash(
-                    "An error occurred while processing your "
-                    "request. Please try again.",
-                    "danger",
+                    "Email already sent recently. Please wait before requesting again.",
+                    "warning",
                 )
-    return render_template("resend_confirmation.html", form=form)
-
-
-# ---------------- LOGOUT ----------------
+            session["pending_email"] = email.lower()
+            return redirect(url_for("auth.email_confirmation"))
+        except Exception as e:
+            db.session.rollback()
+            email_confirmation_sends_failure_counter.inc()
+            current_app.logger.error(f"Resend error: {str(e)}")
+            flash("An unexpected error occurred. Please try again.", "danger")
+            return redirect(url_for("auth.email_confirmation"))
 
 
 @auth.route("/logout", methods=["POST"])
 @login_required
 def logout():
     with endpoint_latency.labels(endpoint="/logout").time():
+        AuditLog.log(
+            action="logout",
+            user_id=current_user.id,
+            detail=f"User logged out: {current_user.email}",
+            ip_address=request.remote_addr,
+        )
+        db.session.commit()
         user_email = current_user.email
         logout_user()
         current_app.logger.info(f"User '{user_email}' logged out successfully.")
         flash("You have been logged out.", "info")
         return redirect(url_for("auth.login"))
-
-
-# ---------------- STATIC PAGES ----------------
 
 
 @auth.route("/check-box", methods=["GET"])
@@ -240,9 +268,6 @@ def register_land():
         return render_template("registrationLand.html")
 
 
-# ---------------- GOOGLE OAUTH ----------------
-
-
 @auth.route("/register/google")
 def register_google():
     with endpoint_latency.labels(endpoint="/register/google").time():
@@ -255,7 +280,10 @@ def register_google():
         except Exception as e:
             registration_failure_counter.inc()
             current_app.logger.error(f"Error during Google registration: {e}")
-            flash(f"Error during Google registration: {e}", "danger")
+            flash(
+                "An unexpected error occurred during Google sign-up. Please try again.",
+                "danger",
+            )
             return redirect(url_for("auth.register_land"))
 
 
@@ -263,63 +291,55 @@ def register_google():
 def google_register_authorized():
     with endpoint_latency.labels(endpoint="/register/google/authorized").time():
         try:
-            token = oauth.google.authorize_access_token()
+            oauth.google.authorize_access_token()
             nonce = session.get("nonce")
-
             if not nonce:
-                flash("Nonce missing. Please try again.", "danger")
+                flash("Session expired. Please try again.", "danger")
                 return redirect(url_for("auth.register"))
-
             user_info = oauth.google.get("userinfo").json()
             email = user_info.get("email")
             name = user_info.get("name") or user_info.get("given_name") or "User"
-
+            if not email:
+                flash(
+                    "Could not retrieve email from Google. Please try again.", "danger"
+                )
+                return redirect(url_for("auth.register"))
             stmt = select(User).where(User.email == email.lower())
             user = db.session.scalar(stmt)
-
             if user:
                 flash(
                     "An account with this email already exists. Please log in.",
                     "warning",
                 )
                 return redirect(url_for("auth.login"))
-
             session["oauth_email"] = email
             session["oauth_name"] = name
             return redirect(url_for("auth.setup_password"))
-
         except Exception as e:
-            flash(f"An error occurred during Google registration: {str(e)}", "danger")
             current_app.logger.error(f"Google registration error: {str(e)}")
+            flash(
+                "An unexpected error occurred during Google sign-up. Please try again.",
+                "danger",
+            )
             return redirect(url_for("auth.register"))
-
-
-# ---------------- SETUP PASSWORD ----------------
 
 
 @auth.route("/setup_password", methods=["GET", "POST"])
 def setup_password():
     with endpoint_latency.labels(endpoint="/setup_password").time():
-        try:
-            form = SetUpPassword()
-            email = session.get("oauth_email")
-            name = session.get("oauth_name")
-
-            if not email or not name:
-                flash(
-                    "Session expired or invalid. Please authenticate again.", "danger"
-                )
-                return redirect(url_for("auth.register_land"))
-
-            if form.validate_on_submit():
-                existing_user = select(User).where(
-                    User.username == form.username.data.lower()
-                )
-                user = db.session.scalar(existing_user)
-                if user:
+        email = session.get("oauth_email")
+        name = session.get("oauth_name")
+        if not email or not name:
+            flash("Session expired or invalid. Please authenticate again.", "danger")
+            return redirect(url_for("auth.register_land"))
+        form = SetUpPassword()
+        if form.validate_on_submit():
+            try:
+                stmt = select(User).where(User.username == form.username.data.lower())
+                existing_user = db.session.scalar(stmt)
+                if existing_user:
                     flash("Username already registered.", "warning")
                     return render_template("oauth_set_up_password.html", form=form)
-
                 hashed_pw = bcrypt.generate_password_hash(form.password.data).decode(
                     "utf-8"
                 )
@@ -329,22 +349,36 @@ def setup_password():
                     email=email,
                     password=hashed_pw,
                     confirmed=True,
+                    role="developer",
+                    status="pending",
                 )
                 db.session.add(new_user)
-                db.session.commit()
-                current_app.logger.info(
-                    f"User account created via setup_password: {email}"
+                db.session.flush()
+                AuditLog.log(
+                    action="register_oauth",
+                    user_id=new_user.id,
+                    detail=f"New Google OAuth registration: {email}",
+                    ip_address=request.remote_addr,
                 )
+                db.session.commit()
+                send_admin_new_user_notification(new_user)
                 registration_success_counter.inc()
                 login_user(new_user)
-
-                flash("Registration successful. You are now logged in.", "success")
                 session.pop("oauth_email", None)
                 session.pop("oauth_name", None)
-                return redirect(url_for("dashboard.dashboard_view"))
-        except Exception as e:
-            registration_failure_counter.inc()
-            current_app.logger.error(f"Error during Setup Password Registration: {e}")
-            flash("Error during account setup.", "danger")
-            return redirect(url_for("auth.registerL"))
+                flash(
+                    "Registration successful! Your account is pending admin approval.",
+                    "success",
+                )
+                return redirect(url_for("auth.pending"))
+            except Exception as e:
+                db.session.rollback()
+                registration_failure_counter.inc()
+                current_app.logger.error(f"Error during OAuth account setup: {e}")
+                flash(
+                    "An unexpected error occurred during account setup. "
+                    "Please try again.",
+                    "danger",
+                )
+                return redirect(url_for("auth.register_land"))
     return render_template("oauth_set_up_password.html", form=form)

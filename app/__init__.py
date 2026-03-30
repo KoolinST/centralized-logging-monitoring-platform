@@ -1,37 +1,23 @@
-from flask import Flask, Response
-from dotenv import load_dotenv
-from datetime import timedelta
-from app.extensions import db, login_manager, bcrypt, mail, oauth
-from app.routes.auth import auth
-from app.routes.dashboard import dashboard
-from app.routes.password import password
 import os
 import logging
 from logging.handlers import RotatingFileHandler
+from datetime import timedelta
+
+from flask import Flask, Response, render_template
+from dotenv import load_dotenv
 from prometheus_flask_exporter import PrometheusMetrics
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
+from app.extensions import db, login_manager, bcrypt, mail, oauth
 
 load_dotenv()
 
 
 def create_app(env=None):
-    # App initialization
     app = Flask(
         __name__,
         template_folder="../frontend/templates",
         static_folder="../frontend/static",
     )
-
-    log_level = logging.INFO if env in ("production", "testing") else logging.DEBUG
-
-    formatter = logging.Formatter(
-        "%(asctime)s %(name)s.%(funcName)s [%(levelname)s] - %(message)s"
-    )
-
-    file_handler = RotatingFileHandler("app.log", maxBytes=10_000_000, backupCount=3)
-    file_handler.setLevel(log_level)
-    file_handler.setFormatter(formatter)
-    app.logger.addHandler(file_handler)
 
     if not env:
         env = os.getenv("FLASK_ENV", "development")
@@ -48,28 +34,33 @@ def create_app(env=None):
         from app.config.settings import DevelopmentConfig
 
         app.config.from_object(DevelopmentConfig)
+
+    log_level = logging.INFO if env in ("production", "testing") else logging.DEBUG
+    formatter = logging.Formatter(
+        "%(asctime)s %(name)s.%(funcName)s [%(levelname)s] - %(message)s"
+    )
+
+    file_handler = RotatingFileHandler("app.log", maxBytes=10_000_000, backupCount=3)
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+    app.logger.addHandler(file_handler)
+
+    if env == "development":
         console_handler = logging.StreamHandler()
         console_handler.setLevel(log_level)
         console_handler.setFormatter(formatter)
         app.logger.addHandler(console_handler)
 
+    app.logger.setLevel(log_level)
+
     db.init_app(app)
     login_manager.init_app(app)
     bcrypt.init_app(app)
     mail.init_app(app)
-    metrics = PrometheusMetrics(app)
-    # Configure login manager
+    PrometheusMetrics(app)
+
     login_manager.login_view = "auth.login"
     login_manager.remember_cookie_duration = timedelta(hours=1)
-
-    # Register Blueprints
-    app.register_blueprint(auth)
-    app.register_blueprint(dashboard)
-    app.register_blueprint(password)
-
-    @app.route("/metrics")
-    def metrics_endpoint():
-        return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
 
     oauth.init_app(app)
     oauth.register(
@@ -88,17 +79,85 @@ def create_app(env=None):
         client_kwargs={"scope": "openid email profile"},
     )
 
+    from app.routes.auth import auth
+    from app.routes.dashboard import dashboard
+    from app.routes.password import password
+    from app.routes.admin import admin
+    from app.routes.proxy import proxy
+
+    app.register_blueprint(auth)
+    app.register_blueprint(dashboard)
+    app.register_blueprint(password)
+    app.register_blueprint(admin)
+    app.register_blueprint(proxy)
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template("errors/403.html"), 403
+
+    @app.route("/metrics")
+    def metrics_endpoint():
+        return Response(generate_latest(), mimetype=CONTENT_TYPE_LATEST)
+
+    @app.route("/test")
+    def test():
+        return "OK", 200
+
     from app.models.user import User
-
-    globals()["User"] = User
-
-    @app.before_request
-    def create_tables_and_seed_data():
-        if app.config["ENV"] == "development":
-            db.create_all()
 
     @login_manager.user_loader
     def load_user(user_id):
         return db.session.get(User, int(user_id))
 
+    with app.app_context():
+        db.create_all()
+        _seed_admin(app)
+
+    from flask_wtf.csrf import generate_csrf
+
+    @app.context_processor
+    def inject_csrf():
+        return dict(csrf_token=generate_csrf)
+
+    @app.context_processor
+    def inject_base_url():
+        return dict(base_url=os.getenv("APP_BASE_URL", "http://localhost:5050"))
+
     return app
+
+
+def _seed_admin(app):
+    """Create the first admin account from environment variables if none exists."""
+    from app.models.user import User
+    from sqlalchemy import select
+
+    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    admin_name = os.getenv("ADMIN_NAME", "Admin")
+    admin_username = os.getenv("ADMIN_USERNAME", "admin")
+
+    if not admin_email or not admin_password:
+        app.logger.warning(
+            "ADMIN_EMAIL or ADMIN_PASSWORD not set — skipping admin seed."
+        )
+        return
+
+    existing = db.session.scalar(select(User).where(User.email == admin_email.lower()))
+    if existing:
+        return
+
+    from app.extensions import bcrypt
+
+    hashed_pw = bcrypt.generate_password_hash(admin_password).decode("utf-8")
+    admin_user = User(
+        name=admin_name,
+        username=admin_username,
+        email=admin_email.lower(),
+        password=hashed_pw,
+        role="admin",
+        confirmed=True,
+        status="approved",
+    )
+    db.session.add(admin_user)
+    db.session.commit()
+    app.logger.info(f"Admin account seeded: {admin_email}")

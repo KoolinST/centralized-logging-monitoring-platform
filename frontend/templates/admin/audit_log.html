@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audit Log — DevOps Platform</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body, html {
+            height: 100vh;
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #141414;
+            color: #fff;
+        }
+        .layout { display: flex; min-height: 100vh; }
+        .sidebar {
+            width: 220px;
+            background-color: #1e1e1e;
+            border-right: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            padding: 1.5rem 0;
+            flex-shrink: 0;
+        }
+        .sidebar-logo {
+            padding: 0 1.5rem 1.5rem;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #fdfdfd;
+            border-bottom: 1px solid #333;
+        }
+        .sidebar-logo span { color: #a86dd4; }
+        .sidebar-nav { padding: 1rem 0; flex: 1; }
+        .nav-section {
+            padding: 0.75rem 1.5rem 0.25rem;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #555;
+        }
+        .nav-item {
+            display: block;
+            padding: 0.6rem 1.5rem;
+            color: #aaa;
+            text-decoration: none;
+            font-size: 0.9rem;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        .nav-item:hover, .nav-item.active {
+            color: #fdfdfd;
+            background-color: #2a2a2a;
+            border-left-color: #a86dd4;
+        }
+        .sidebar-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid #333;
+            font-size: 0.85rem;
+            color: #888;
+        }
+        .main { flex: 1; padding: 2rem; overflow-y: auto; }
+        .page-header { margin-bottom: 2rem; }
+        .page-header h1 { font-size: 1.6rem; font-weight: 700; color: #fdfdfd; }
+        .page-header p { color: #888; font-size: 0.9rem; margin-top: 4px; }
+        .section {
+            background-color: #1e1e1e;
+            border-radius: 12px;
+            box-shadow: 0 0 20px rgba(128,0,128,0.3);
+            overflow: hidden;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th {
+            padding: 0.75rem 1.5rem;
+            text-align: left;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #555;
+            background-color: #141414;
+            border-bottom: 1px solid #333;
+        }
+        td {
+            padding: 0.9rem 1.5rem;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #2a2a2a;
+            vertical-align: middle;
+        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background-color: #2a2a2a; }
+        .action-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 99px;
+            font-size: 0.8rem;
+            background: #2a2a2a;
+            color: #aaa;
+        }
+        .action-login { background: #1a2a3d; color: #63b3ed; }
+        .action-login_failed { background: #2e1a1a; color: #fc8181; }
+        .action-logout { background: #2a2a2a; color: #aaa; }
+        .action-register, .action-register_oauth { background: #1a2e1e; color: #68d391; }
+        .action-user_approved { background: #1a2e1e; color: #68d391; }
+        .action-user_rejected { background: #2e1a1a; color: #fc8181; }
+        .action-role_changed { background: #2a1f3d; color: #c084fc; }
+        .action-user_deactivated { background: #2d2a1e; color: #f6ad55; }
+        .action-email_confirmed { background: #1a2a3d; color: #63b3ed; }
+        .action-proxy_access_kibana { background: #1a2a2a; color: #4fd1c5; }
+        .action-proxy_access_prometheus { background: #2a1a2a; color: #d6bcfa; }
+        .action-proxy_access_node-exporter { background: #2a2a1a; color: #faf089; }
+        .empty {
+            padding: 2rem;
+            text-align: center;
+            color: #555;
+            font-size: 0.9rem;
+        }
+        @media (max-width: 1100px) { .sidebar { display: none; } }
+    </style>
+</head>
+<body>
+<div class="layout">
+    <div class="sidebar">
+        <div class="sidebar-logo"><span>DevOps</span> Platform</div>
+        <nav class="sidebar-nav">
+            <span class="nav-section">Admin</span>
+            <a href="{{ url_for('admin.dashboard') }}" class="nav-item">User Management</a>
+            <a href="{{ url_for('admin.audit_log') }}" class="nav-item active">Audit Log</a>
+            <span class="nav-section">Observability</span>
+            <a href="http://localhost:3000" target="_blank" class="nav-item">Grafana</a>
+            <a href="{{ url_for('proxy.kibana') }}" target="_blank" class="nav-item">Kibana</a>
+            <a href="{{ url_for('proxy.prometheus') }}" target="_blank" class="nav-item">Prometheus</a>
+            <span class="nav-section">Account</span>
+            <a href="{{ url_for('dashboard.dashboard_view') }}" class="nav-item">Dashboard</a>
+        </nav>
+        <div class="sidebar-footer">
+            {{ user.name }}<br>
+            <span style="color: #a86dd4; font-size: 0.8rem;">Administrator</span>
+        </div>
+    </div>
+    <div class="main">
+        <div class="page-header">
+            <h1>Audit Log</h1>
+            <p>Complete record of all user actions on the platform.</p>
+        </div>
+        <div class="section">
+            {% if logs %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Action</th>
+                        <th>Detail</th>
+                        <th>IP Address</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td style="color: #555; font-size: 0.8rem;">{{ log.id }}</td>
+                        <td>
+                            <span class="action-badge action-{{ log.action }}">{{ log.action }}</span>
+                        </td>
+                        <td style="color: #aaa; font-size: 0.85rem;">{{ log.detail or '—' }}</td>
+                        <td style="color: #888; font-size: 0.85rem; font-family: monospace;">{{ log.ip_address or '—' }}</td>
+                        <td style="color: #888; font-size: 0.85rem;">{{ log.timestamp }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty">No audit logs yet.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+</body>
+</html>

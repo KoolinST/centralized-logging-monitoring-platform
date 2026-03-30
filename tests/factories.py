@@ -24,7 +24,8 @@ class UserFactory(factory.alchemy.SQLAlchemyModelFactory):
     name = factory.Faker("name")
     username = factory.Faker("user_name")
     email = factory.Faker("email")
-    role = FuzzyChoice(["user", "admin"])
+    role = FuzzyChoice(["admin", "developer", "viewer"])
+    status = FuzzyChoice(["pending", "approved", "rejected"])
     confirmed = factory.Faker("boolean", chance_of_getting_true=50)
     last_login = factory.LazyFunction(lambda: int(time.time()))
     password_reset_token = None

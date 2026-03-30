@@ -3,27 +3,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Centralized Monitoring System</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}">
+    <title>Dashboard — DevOps Platform</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dashboard.css') }}?v=2">
 </head>
 <body>
     <div class="container">
-          {% with messages = get_flashed_messages(with_categories=true) %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
-              <div class="flash-messages">
+              <div class="flash-messages" style="padding: 0 2rem; margin-top: 1rem;">
                 {% for category, message in messages %}
                   <div class="flash {{ category }}">{{ message }}</div>
                 {% endfor %}
               </div>
             {% endif %}
-          {% endwith %}
+        {% endwith %}
+
         <header class="header">
-            <h1>Dashboard</h1>
+            <h1>DevOps Platform</h1>
             <nav>
-                <a href="#" class="nav-item">Home</a>
-                <a href="#" class="nav-item">Logs</a>
-                <a href="#" class="nav-item">Metrics</a>
-                <a href="#" class="nav-item">Settings</a>
+                <a href="{{ url_for('dashboard.dashboard_view') }}" class="nav-item">Home</a>
+                {% if user.is_admin or user.is_developer %}
+                <a href="{{ url_for('proxy.kibana') }}" target="_blank" class="nav-item">Logs</a>
+                <a href="{{ url_for('proxy.prometheus') }}" target="_blank" class="nav-item">Metrics</a>
+                {% endif %}
+                <a href="http://localhost:3000" target="_blank" class="nav-item">Grafana</a>
+                {% if user.is_admin %}
+                <a href="{{ url_for('admin.dashboard') }}" class="nav-item" style="color: #c084fc;">Admin</a>
+                {% endif %}
                 <form method="POST" action="{{ url_for('auth.logout') }}" class="logout-form">
                     {{ form.hidden_tag() }}
                     <button type="submit" class="logout-button">Logout</button>
@@ -32,39 +38,85 @@
         </header>
 
         <div class="main-content">
+            <div style="margin-bottom: 2rem; display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <h2 style="font-size: 1.4rem; color: #fdfdfd;">Welcome back, {{ user.name }}</h2>
+                    <p style="color: #888; font-size: 0.9rem; margin-top: 4px;">{{ user.email }}</p>
+                </div>
+                <span style="
+                    background-color: #2a2a2a;
+                    border: 1px solid #a86dd4;
+                    color: #a86dd4;
+                    padding: 4px 16px;
+                    border-radius: 99px;
+                    font-size: 0.85rem;
+                    font-weight: 600;
+                ">{{ user.role | capitalize }}</span>
+            </div>
+
             <div class="cards">
-                <div class="card">
-                    <h3>Total Logs</h3>
-                    <p>1,245</p>
-                </div>
-                <div class="card">
-                    <h3>Active Sessions</h3>
-                    <p>56</p>
-                </div>
-                <div class="card">
-                    <h3>Error Rate</h3>
-                    <p>3.2%</p>
-                </div>
-                <div class="card">
-                    <h3>Alerts</h3>
-                    <p>12</p>
-                </div>
+                <a href="http://localhost:3000" target="_blank" class="card card-link">
+                    <h3>Grafana</h3>
+                    <p class="card-desc">Real-time metrics dashboards</p>
+                </a>
+                {% if user.is_admin or user.is_developer %}
+                <a href="{{ url_for('proxy.kibana') }}" target="_blank" class="card card-link">
+                    <h3>Kibana</h3>
+                    <p class="card-desc">Log search and visualization</p>
+                </a>
+                <a href="{{ url_for('proxy.prometheus') }}" target="_blank" class="card card-link">
+                    <h3>Prometheus</h3>
+                    <p class="card-desc">Metrics collection and alerting</p>
+                </a>
+                {% endif %}
+                {% if user.is_admin %}
+                <a href="{{ url_for('admin.dashboard') }}" class="card card-link">
+                    <h3>Admin Panel</h3>
+                    <p class="card-desc">Manage users and access</p>
+                </a>
+                {% endif %}
             </div>
 
             <div class="charts">
                 <div class="chart">
-                    <h4>Log Trends</h4>
-                    <div class="placeholder">Chart Placeholder</div>
+                    <h4>CPU Usage</h4>
+                    <iframe src="http://localhost:3000/d-solo/rYdddlPWk/node-exporter-full?orgId=1&refresh=5s&panelId=3&theme=dark" width="100%" height="250" frameborder="0" style="border-radius: 6px; margin-top: 1rem;"></iframe>
                 </div>
                 <div class="chart">
-                    <h4>Error Trends</h4>
-                    <div class="placeholder">Chart Placeholder</div>
+                    <h4>Memory Usage</h4>
+                    <iframe src="http://localhost:3000/d-solo/rYdddlPWk/node-exporter-full?orgId=1&refresh=5s&panelId=131&theme=dark" width="100%" height="250" frameborder="0" style="border-radius: 6px; margin-top: 1rem;"></iframe>
                 </div>
             </div>
+            <div class="charts" style="margin-top: 2rem;">
+                <div class="chart">
+                    <h4>Network Traffic</h4>
+                    <iframe src="http://localhost:3000/d-solo/rYdddlPWk/node-exporter-full?orgId=1&refresh=5s&panelId=74&theme=dark" width="100%" height="250" frameborder="0" style="border-radius: 6px; margin-top: 1rem;"></iframe>
+                </div>
+                <div class="chart">
+                    <h4>Disk I/O</h4>
+                    <iframe src="http://localhost:3000/d-solo/rYdddlPWk/node-exporter-full?orgId=1&refresh=5s&panelId=155&theme=dark" width="100%" height="250" frameborder="0" style="border-radius: 6px; margin-top: 1rem;"></iframe>
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem; background-color: #1e1e1e; border-radius: 12px; padding: 1.5rem; box-shadow: 0 0 20px rgba(128,0,128,0.3);">
+                <h4 style="font-size: 1rem; color: #fdfdfd; margin-bottom: 1rem;">Quick Links</h4>
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+                    <a href="http://localhost:3000" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Grafana Dashboards →</a>
+                    {% if user.is_admin or user.is_developer %}
+                    <a href="{{ url_for('proxy.kibana') }}" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Kibana Logs →</a>
+                    <a href="{{ url_for('proxy.prometheus') }}" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Prometheus →</a>
+                    <a href="{{ url_for('proxy.node_exporter') }}" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Node Exporter →</a>
+                    {% endif %}
+                    {% if user.is_admin %}
+                    <a href="http://localhost:8081" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">PGAdmin →</a>
+                    {% endif %}
+                </div>
+            </div>
+
         </div>
 
         <footer>
-            <p>&copy; 2025 Centralized Monitoring System</p>
+            <p>&copy; 2025 DevOps Platform</p>
         </footer>
     </div>
 </body>

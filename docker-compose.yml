@@ -1,4 +1,5 @@
 services:
+
   flask_app:
     build: .
     env_file:
@@ -6,12 +7,17 @@ services:
     ports:
       - "5050:5050"
     depends_on:
-      - db
-    volumes:
-      - ./app:/app
+      db:
+        condition: service_healthy
     networks:
       - monitoring
-
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5050/metrics"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   db:
     image: postgres:14
@@ -23,39 +29,66 @@ services:
       - pg_data:/var/lib/postgresql/data
     networks:
       - monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   pgadmin:
     image: dpage/pgadmin4
     env_file:
       - .env
     ports:
-      - "8080:80"
+      - "8081:80"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     networks:
       - monitoring
+    restart: unless-stopped
 
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: prometheus
+  nginx:
+    image: nginx:latest
     volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
+      - ./monitoring/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      - "9090:9090"
+      - "8888:8080"
+    depends_on:
+      - kibana
+      - prometheus
+      - node-exporter
+      - flask_app
     networks:
       - monitoring
+    restart: unless-stopped
+
+  prometheus:
+      image: prom/prometheus:latest
+      container_name: prometheus
+      volumes:
+        - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+        - prometheus_data:/prometheus
+      command:
+        - '--config.file=/etc/prometheus/prometheus.yml'
+        - '--storage.tsdb.path=/prometheus'
+        - '--storage.tsdb.retention.time=15d'
+        - '--web.external-url=/prometheus'
+        - '--web.route-prefix=/prometheus'
+      networks:
+        - monitoring
+      restart: unless-stopped
 
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
-    ports:
-      - "9100:9100"
     networks:
       - monitoring
+    restart: unless-stopped
 
   grafana:
     image: grafana/grafana:latest
@@ -65,14 +98,19 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=${GF_SECURITY_ADMIN_USER}
       - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
       - grafana-storage:/var/lib/grafana
+      - ./monitoring/grafana/grafana.ini:/etc/grafana/grafana.ini
     ports:
       - "3000:3000"
     depends_on:
       - prometheus
     networks:
       - monitoring
+    restart: unless-stopped
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.10.0
@@ -80,30 +118,39 @@ services:
       - .env
     environment:
       - discovery.type=single-node
-      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     ports:
       - "9200:9200"
     volumes:
       - es_data:/usr/share/elasticsearch/data
     networks:
       - monitoring
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -sf http://localhost:9200/_cluster/health | grep -q status" ]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   kibana:
-    image: docker.elastic.co/kibana/kibana:7.10.0
-    env_file:
-      - .env
-    environment:
-      - ELASTICSEARCH_HOSTS=${ELASTICSEARCH_HOSTS}
-      - ELASTICSEARCH_PASSWORD=${ELASTICSEARCH_PASSWORD}
-    ports:
-      - "5601:5601"
-    depends_on:
-      - elasticsearch
-    networks:
-      - monitoring
+      image: docker.elastic.co/kibana/kibana:7.10.0
+      env_file:
+        - .env
+      environment:
+        - ELASTICSEARCH_HOSTS=${ELASTICSEARCH_HOSTS}
+        - SERVER_BASEPATH=/kibana
+        - SERVER_REWRITEBASEPATH=true
+      depends_on:
+        elasticsearch:
+          condition: service_healthy
+      networks:
+        - monitoring
+      restart: unless-stopped
 
   fluentd:
-    image: fluent/fluentd:v1.12-1
+    image: fluent/fluentd-kubernetes-daemonset:v1.12-debian-elasticsearch7-1
     env_file:
       - .env
     environment:
@@ -112,9 +159,13 @@ services:
       - FLUENTD_ELASTICSEARCH_USER=${FLUENTD_ELASTICSEARCH_USER}
       - FLUENTD_ELASTICSEARCH_PASSWORD=${FLUENTD_ELASTICSEARCH_PASSWORD}
     volumes:
-      - ./fluentd/conf:/fluentd/etc
+      - ./fluentd/conf/fluentd.conf:/fluentd/etc/fluent.conf:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
     networks:
       - monitoring
+    restart: unless-stopped
 
 networks:
   monitoring:
@@ -125,3 +176,4 @@ volumes:
   pgadmin_data:
   grafana-storage:
   es_data:
+  prometheus_data:

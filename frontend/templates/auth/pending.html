@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Account Pending</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body, html {
+      height: 100vh;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #1e1e1e;
+      color: #fff;
+      width: 100%;
+    }
+    .container {
+      display: flex;
+      height: 100vh;
+      width: 100%;
+    }
+    .left-panel {
+      width: 35%;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background-color: transparent;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .left-panel img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .right-panel {
+      flex: 1;
+      background-color: #141414;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+    .form-box {
+      width: 100%;
+      max-width: 400px;
+      background-color: #1e1e1e;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(128, 0, 128, 0.3);
+      text-align: center;
+    }
+    .icon {
+      font-size: 3rem;
+      margin-bottom: 1rem;
+    }
+    h2 {
+      margin-bottom: 0.5rem;
+      font-size: 1.8rem;
+      color: #fdfdfd;
+    }
+    .subtext {
+      font-size: 0.95rem;
+      color: #bbb;
+      margin-bottom: 1.5rem;
+    }
+    .status-badge {
+      display: inline-block;
+      background-color: #2a2a2a;
+      border: 1px solid #a86dd4;
+      color: #a86dd4;
+      padding: 4px 16px;
+      border-radius: 99px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+    }
+    .info-box {
+      background-color: #2a2a2a;
+      border: 1px solid #444;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      text-align: left;
+    }
+    .info-box p {
+      font-size: 0.9rem;
+      color: #bbb;
+      margin-bottom: 4px;
+    }
+    .info-box strong { color: #fdfdfd; }
+    .note {
+      font-size: 0.85rem;
+      color: #888;
+      margin-bottom: 1.5rem;
+      line-height: 1.6;
+    }
+    button[type="submit"] {
+      width: 100%;
+      padding: 0.9rem;
+      border: none;
+      background-color: #2a2a2a;
+      color: #bbb;
+      font-weight: bold;
+      border-radius: 6px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      border: 1px solid #444;
+    }
+    button[type="submit"]:hover {
+      background-color: #333;
+      color: #fff;
+    }
+    @media (max-width: 1100px) {
+      .left-panel { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="right-panel">
+      <div class="form-box">
+        <div class="icon"></div>
+        <h2>Awaiting Approval</h2>
+        <p class="subtext">Your account is being reviewed by an administrator</p>
+        <div class="status-badge">Status: Pending</div>
+        <div class="info-box">
+          <p><strong>{{ user.name }}</strong></p>
+          <p>{{ user.email }}</p>
+          <p style="margin-top: 8px;">Role: <strong>{{ user.role | capitalize }}</strong></p>
+        </div>
+        <p class="note">
+          You will receive an email once your account has been reviewed.
+          This usually takes less than 24 hours.
+        </p>
+        <form action="{{ url_for('auth.logout') }}" method="POST">
+          {{ form.hidden_tag() }}
+          <button type="submit">Sign out</button>
+        </form>
+      </div>
+    </div>
+    <div class="left-panel">
+      <img src="{{ url_for('static', filename='images/pexels-rickyrecap-1964471.jpg') }}" alt="Illustration" />
+    </div>
+  </div>
+</body>
+</html>

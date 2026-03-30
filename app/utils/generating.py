@@ -1,6 +1,7 @@
+import secrets
 import string
-import random
 
 
-def generate_nonce():
-    return "".join(random.choices(string.ascii_letters + string.digits, k=16))
+def generate_nonce(length: int = 16) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))

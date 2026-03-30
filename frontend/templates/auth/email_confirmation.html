@@ -8,7 +8,6 @@
 </head>
 <body>
   <div class="container">
-
     <div class="right-panel">
       <div class="form-box">
         <h2>Email Confirmation</h2>
@@ -23,17 +22,19 @@
           {% endif %}
         {% endwith %}
         <div class="message-box">
-          <p class="info-message">We've sent a confirmation email to <strong>{{ email }}</strong>. If you don't see it, check your spam folder or <a href="{{ url_for('auth.resend_confirmation', token = token) }}">request a new one</a>.</p>
+          <p class="info-message">We've sent a confirmation email to <strong>{{ email }}</strong>. If you don't see it, check your spam folder.</p>
         </div>
-
+        <form method="POST" action="{{ url_for('auth.resend_confirmation') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="email" value="{{ email }}">
+          <button type="submit">Resend Email</button>
+        </form>
         <p class="login-link">Already have an account? <a href="{{ url_for('auth.login') }}">Log in</a></p>
       </div>
     </div>
-
     <div class="left-panel">
       <img src="{{ url_for('static', filename='images/pexels-rickyrecap-1964471.jpg') }}" alt="Confirmation Illustration" />
     </div>
-
   </div>
 </body>
 </html>
