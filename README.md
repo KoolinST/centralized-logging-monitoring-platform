@@ -270,7 +270,22 @@ The test job only runs if lint passes.
                                         │   :5601     │
                                         └─────────────┘
 ```
+## Screenshots
 
+### Admin Dashboard
+![Admin Dashboard](docs/screenshots/dashboard-admin.png)
+
+### Viewer Dashboard
+![Viewer Dashboard](docs/screenshots/dashboard-viewer.png)
+
+### Pending Approval
+![Pending](docs/screenshots/pending.png)
+
+### Admin Panel
+![Admin Panel](docs/screenshots/admin-panel.png)
+
+### Access Denied
+![403](docs/screenshots/403.png)
 ---
 
 ## License
