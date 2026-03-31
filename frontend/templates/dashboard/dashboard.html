@@ -101,14 +101,14 @@
             <div style="margin-top: 2rem; background-color: #1e1e1e; border-radius: 12px; padding: 1.5rem; box-shadow: 0 0 20px rgba(128,0,128,0.3);">
                 <h4 style="font-size: 1rem; color: #fdfdfd; margin-bottom: 1rem;">Quick Links</h4>
                 <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-                    <a href="http://localhost:3000" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Grafana Dashboards →</a>
+                    <a href="http://localhost:3000" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Grafana Dashboards</a>
                     {% if user.is_admin or user.is_developer %}
-                    <a href="{{ url_for('proxy.kibana') }}" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Kibana Logs →</a>
-                    <a href="{{ url_for('proxy.prometheus') }}" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Prometheus →</a>
-                    <a href="{{ url_for('proxy.node_exporter') }}" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Node Exporter →</a>
+                    <a href="{{ url_for('proxy.kibana') }}" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Kibana Logs</a>
+                    <a href="{{ url_for('proxy.prometheus') }}" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Prometheus</a>
+                    <a href="{{ url_for('proxy.node_exporter') }}" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">Node Exporter</a>
                     {% endif %}
                     {% if user.is_admin %}
-                    <a href="http://localhost:8081" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">PGAdmin →</a>
+                    <a href="http://localhost:8081" target="_blank" style="color: #a86dd4; text-decoration: none; font-size: 0.9rem;">PGAdmin</a>
                     {% endif %}
                 </div>
             </div>
