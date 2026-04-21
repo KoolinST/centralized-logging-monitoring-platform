@@ -1,6 +1,8 @@
 from wtforms import PasswordField, SubmitField, StringField
 from flask_wtf import FlaskForm
-from wtforms.validators import DataRequired, Length, EqualTo
+from wtforms.validators import DataRequired, Length, EqualTo, ValidationError
+from app.extensions import db
+from sqlalchemy import select
 
 
 class SetUpPassword(FlaskForm):
@@ -19,3 +21,12 @@ class SetUpPassword(FlaskForm):
         ],
     )
     submit = SubmitField("Sign Up")
+
+    def validate_username(self, username):
+        from app.models.user import User
+
+        user = db.session.scalar(select(User).where(User.username.ilike(username.data)))
+        if user:
+            raise ValidationError(
+                "This username is already taken. Please choose a different one."
+            )

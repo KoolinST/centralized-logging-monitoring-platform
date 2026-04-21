@@ -2,6 +2,8 @@ services:
 
   flask_app:
     build: .
+    volumes:
+      - ./frontend:/app/frontend
     env_file:
       - .env
     ports:
