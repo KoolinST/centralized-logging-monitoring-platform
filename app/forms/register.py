@@ -4,6 +4,7 @@ from wtforms.validators import DataRequired, Length, EqualTo, ValidationError, E
 from sqlalchemy import select
 from app.extensions import db
 
+
 class RegisterForm(FlaskForm):
     name = StringField("Name", validators=[DataRequired()])
     email = StringField(
