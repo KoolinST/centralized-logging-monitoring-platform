@@ -169,7 +169,7 @@ class TestProxyRoutes(unittest.TestCase):
         """Auth check for prometheus returns 401 for unauthenticated"""
         with self.app.test_request_context("/"):
             response = self.client.get(url_for("proxy.auth_prometheus"))
-        self.assertEqual(response.status_code, HTTP_302_FOUND)
+        self.assertEqual(response.status_code, HTTP_401_UNAUTHORIZED)
 
 
 if __name__ == "__main__":
