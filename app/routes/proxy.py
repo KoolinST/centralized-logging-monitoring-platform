@@ -1,3 +1,4 @@
+import os
 from flask import Blueprint, redirect, request, make_response
 from flask_login import login_required, current_user
 from app.utils.decorators import role_required
@@ -26,19 +27,16 @@ def _auth_check(service: str):
 
 
 @proxy.route("/auth/kibana")
-@login_required
 def auth_kibana():
     return _auth_check("kibana")
 
 
 @proxy.route("/auth/prometheus")
-@login_required
 def auth_prometheus():
     return _auth_check("prometheus")
 
 
 @proxy.route("/auth/node-exporter")
-@login_required
 def auth_node_exporter():
     return _auth_check("node-exporter")
 
@@ -47,18 +45,21 @@ def auth_node_exporter():
 @login_required
 @role_required("admin", "developer")
 def kibana():
-    return redirect("http://localhost:8888/kibana/")
+    base = os.getenv("INTERNAL_PROXY_URL", "http://localhost:8888")
+    return redirect(f"{base}/kibana/")
 
 
 @proxy.route("/prometheus")
 @login_required
 @role_required("admin", "developer")
 def prometheus():
-    return redirect("http://localhost:8888/prometheus/")
+    base = os.getenv("INTERNAL_PROXY_URL", "http://localhost:8888")
+    return redirect(f"{base}/prometheus/")
 
 
 @proxy.route("/node-exporter")
 @login_required
 @role_required("admin", "developer")
 def node_exporter():
-    return redirect("http://localhost:8888/node-exporter/")
+    base = os.getenv("INTERNAL_PROXY_URL", "http://localhost:8888")
+    return redirect(f"{base}/node-exporter/")
