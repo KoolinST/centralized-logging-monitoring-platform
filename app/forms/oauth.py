@@ -27,6 +27,4 @@ class SetUpPassword(FlaskForm):
 
         user = db.session.scalar(select(User).where(User.username.ilike(username.data)))
         if user:
-            raise ValidationError(
-                "This username is already taken. Please choose a different one."
-            )
+            raise ValidationError("Username already registered.")
