@@ -24,6 +24,7 @@ def create_app(env=None):
 
     if env == "production":
         from app.config.settings import ProductionConfig
+
         ProductionConfig.validate()
         app.config.from_object(ProductionConfig())
     elif env == "testing":
