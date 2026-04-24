@@ -105,7 +105,6 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
       - grafana-storage:/var/lib/grafana
-      - ./monitoring/grafana/grafana.ini:/etc/grafana/grafana.ini
     ports:
       - "3000:3000"
     depends_on:
