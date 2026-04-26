@@ -91,7 +91,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          pytest --cov=app --cov-report=xml --cov-report=term-missing --junitxml=test-results/results.xml
+          pytest --cov-report=xml --cov-report=term-missing --junitxml=test-results/results.xml
 
       - name: Upload test results
         if: always()
