@@ -73,7 +73,7 @@ shell:
 # ── Quality ───────────────────────────────────────────────────────────────────
 
 test:
-	pytest --cov-report=term-missing --cov-report=xml --junitxml=test-results/results.xml
+	pytest --cov --cov-report=term-missing --cov-report=xml --junitxml=test-results/results.xml
 
 test-fast:
 	pytest -x --cov=app --cov-report=term-missing
